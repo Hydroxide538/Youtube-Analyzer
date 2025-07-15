@@ -26,11 +26,47 @@ class TranscriptionService:
         # Use base model for balance of speed/accuracy, but consider larger models for GPU
         model_name = "base"
         if self.device == "cuda":
-            # Use larger model on GPU for better accuracy
+            # Use larger model on GPU for better accuracy and speed
             model_name = "small"
             logger.info("GPU detected - using 'small' model for better accuracy")
+            
+            # Set CUDA memory fraction to prevent OOM
+            torch.cuda.set_per_process_memory_fraction(0.8)
+            
+            # Ensure proper CUDA device selection
+            torch.cuda.set_device(0)
         
+        logger.info(f"Loading Whisper model '{model_name}' on device '{self.device}'")
         self.model = whisper.load_model(model_name, device=self.device)
+        
+        # Verify the model is on the correct device
+        if hasattr(self.model, 'device'):
+            logger.info(f"Model loaded on device: {self.model.device}")
+        
+        # Configure transcription options based on device
+        self.transcribe_options = {
+            "fp16": self.device == "cuda",  # Use FP16 only on GPU
+            "language": None,  # Auto-detect language
+            "task": "transcribe",
+            "verbose": False
+        }
+        
+        if self.device == "cuda":
+            # GPU-specific optimizations
+            self.transcribe_options.update({
+                "beam_size": 5,  # Better accuracy on GPU
+                "best_of": 5,    # Multiple attempts for better results
+                "temperature": 0.0,  # Deterministic output
+            })
+        else:
+            # CPU-specific optimizations for speed
+            self.transcribe_options.update({
+                "beam_size": 1,  # Faster on CPU
+                "best_of": 1,    # Single attempt for speed
+                "temperature": 0.0,
+            })
+        
+        logger.info(f"Transcription options: {self.transcribe_options}")
         
         # Download NLTK data if not present
         try:
@@ -50,9 +86,9 @@ class TranscriptionService:
             try:
                 logger.info(f"Transcribing segment {i+1}/{len(audio_segments)}")
                 
-                # Transcribe using Whisper
+                # Transcribe using Whisper with device-specific options
                 result = await asyncio.get_event_loop().run_in_executor(
-                    None, self.model.transcribe, segment['path']
+                    None, self._transcribe_with_options, segment['path']
                 )
                 
                 # Clean up the transcript
@@ -262,6 +298,34 @@ class TranscriptionService:
             logger.error(f"Error calculating keyword density: {str(e)}")
             return 0.0
     
+    def _transcribe_with_options(self, audio_path: str) -> Dict[str, Any]:
+        """Transcribe audio file with device-specific optimizations"""
+        try:
+            # Log GPU memory usage if available
+            if self.device == "cuda":
+                memory_allocated = torch.cuda.memory_allocated(0) / 1024**3
+                memory_reserved = torch.cuda.memory_reserved(0) / 1024**3
+                logger.info(f"GPU memory before transcription: {memory_allocated:.2f}GB allocated, {memory_reserved:.2f}GB reserved")
+            
+            # Transcribe with the configured options
+            result = self.model.transcribe(audio_path, **self.transcribe_options)
+            
+            # Log GPU memory usage after transcription
+            if self.device == "cuda":
+                memory_allocated = torch.cuda.memory_allocated(0) / 1024**3
+                memory_reserved = torch.cuda.memory_reserved(0) / 1024**3
+                logger.info(f"GPU memory after transcription: {memory_allocated:.2f}GB allocated, {memory_reserved:.2f}GB reserved")
+                
+                # Clean up GPU memory
+                torch.cuda.empty_cache()
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in transcription: {str(e)}")
+            # Fallback to basic transcription without options
+            return self.model.transcribe(audio_path)
+    
     def _get_device(self) -> str:
         """Detect and return the best available device for PyTorch"""
         try:
@@ -274,8 +338,17 @@ class TranscriptionService:
             if torch.cuda.is_available():
                 device_count = torch.cuda.device_count()
                 device_name = torch.cuda.get_device_name(0)
-                logger.info(f"CUDA GPU available: {device_name} (Total devices: {device_count})")
-                return "cuda"
+                memory_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                logger.info(f"CUDA GPU available: {device_name} (Total devices: {device_count}, Memory: {memory_total:.1f}GB)")
+                
+                # Test GPU functionality
+                try:
+                    test_tensor = torch.tensor([1.0]).cuda()
+                    logger.info("✅ GPU test successful - CUDA is working properly")
+                    return "cuda"
+                except Exception as e:
+                    logger.warning(f"GPU test failed: {e}, falling back to CPU")
+                    return "cpu"
             else:
                 logger.info("CUDA not available, using CPU")
                 return "cpu"
