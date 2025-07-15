@@ -48,6 +48,22 @@ This directory contains development notes, change logs, and build documentation 
 - Supports both host networking and custom Docker networks
 - Reduced application container memory requirements (no Ollama overhead)
 
+**Post-Implementation Fix:**
+- ✅ Removed Ollama service from main docker-compose.yml to prevent container name conflicts
+- ✅ Configured main docker-compose.yml to use host networking by default
+- ✅ Set OLLAMA_HOST=host.docker.internal:11434 for existing container access
+
+**Frontend Access Issues Fix:**
+- ✅ Fixed Docker networking configuration conflicts (host networking + port mapping)
+- ✅ Created docker-compose.bridge.yml for standard bridge networking
+- ✅ Updated OLLAMA_HOST to use localhost when on host network
+- ✅ Created comprehensive TROUBLESHOOTING.md guide
+- ✅ Added diagnostic steps and multiple configuration options
+
+**Files Added:**
+- `docker-compose.bridge.yml` - Bridge networking configuration (recommended)
+- `TROUBLESHOOTING.md` - Comprehensive troubleshooting guide with diagnostics
+
 ## Current Architecture
 
 ### External Services

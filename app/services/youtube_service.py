@@ -26,7 +26,7 @@ class YouTubeService:
     async def download_video(self, url: str) -> Dict[str, Any]:
         """Download YouTube video and extract audio"""
         try:
-            # Configure yt-dlp options
+            # Configure yt-dlp options with anti-bot measures
             ydl_opts = {
                 'format': 'bestaudio/best',
                 'outtmpl': os.path.join(self.temp_dir, '%(title)s.%(ext)s'),
@@ -40,6 +40,26 @@ class YouTubeService:
                 }],
                 'quiet': True,
                 'no_warnings': True,
+                # Anti-bot measures
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'headers': {
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-us,en;q=0.5',
+                    'Accept-Encoding': 'gzip,deflate',
+                    'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                },
+                'extractor_retries': 3,
+                'fragment_retries': 3,
+                'retry_sleep_functions': {
+                    'http': lambda n: min(4 ** n, 60),
+                    'fragment': lambda n: min(4 ** n, 60),
+                    'extractor': lambda n: min(4 ** n, 60),
+                },
+                'sleep_interval': 1,
+                'max_sleep_interval': 5,
+                'cookiesfrombrowser': None,  # Use system cookies if available
             }
             
             # Download video info and audio

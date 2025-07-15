@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  youtube-summarizer:
+    build: .
+    container_name: youtube-summarizer
+    # Note: no ports section with host networking
+    volumes:
+      - temp_files:/app/temp
+      - app_logs:/app/logs
+    environment:
+      - PYTHONPATH=/app
+      - OLLAMA_HOST=localhost:11434  # Use localhost when on host network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    network_mode: "host"  # Use host networking to access your existing Ollama
+
+volumes:
+  temp_files:
+    driver: local
+  app_logs:
+    driver: local
+
+# This configuration uses host networking
+# - No port bindings will show in docker ps
+# - Application binds directly to host's port 8000
+# - Access at: http://localhost:8000
+#
+# To use this configuration:
+# docker-compose -f docker-compose.host.yml up --build

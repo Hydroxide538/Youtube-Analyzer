@@ -5,7 +5,7 @@ services:
     build: .
     container_name: youtube-summarizer
     ports:
-      - "8000:8000"  # This will show in docker ps
+      - "8000:8000"
     volumes:
       - temp_files:/app/temp
       - app_logs:/app/logs
@@ -34,20 +34,10 @@ volumes:
   app_logs:
     driver: local
 
-# Alternative configuration for existing Ollama container:
-# 1. Comment out the 'ollama' service above
-# 2. Update OLLAMA_HOST to point to your existing container
-# 3. Ensure both containers are on the same network
+# This configuration uses bridge networking with host.docker.internal
+# to access your existing Ollama container
 # 
-# Example for external Ollama:
-# environment:
-#   - OLLAMA_HOST=your-ollama-container:11434
-# 
-# Or if using host networking:
-# environment:
-#   - OLLAMA_HOST=host.docker.internal:11434
-# 
-# networks:
-#   default:
-#     external:
-#       name: your-existing-network
+# Access the application at: http://localhost:8000
+#
+# To use this configuration:
+# docker-compose -f docker-compose.bridge.yml up --build
