@@ -10,6 +10,7 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import sent_tokenize, word_tokenize
 import re
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +18,19 @@ class TranscriptionService:
     """Service for transcribing audio and analyzing content"""
     
     def __init__(self):
-        # Load Whisper model (using base model for balance of speed/accuracy)
-        self.model = whisper.load_model("base")
+        # Detect and configure GPU/CPU device
+        self.device = self._get_device()
+        logger.info(f"Using device: {self.device}")
+        
+        # Load Whisper model with appropriate device
+        # Use base model for balance of speed/accuracy, but consider larger models for GPU
+        model_name = "base"
+        if self.device == "cuda":
+            # Use larger model on GPU for better accuracy
+            model_name = "small"
+            logger.info("GPU detected - using 'small' model for better accuracy")
+        
+        self.model = whisper.load_model(model_name, device=self.device)
         
         # Download NLTK data if not present
         try:
@@ -249,3 +261,24 @@ class TranscriptionService:
         except Exception as e:
             logger.error(f"Error calculating keyword density: {str(e)}")
             return 0.0
+    
+    def _get_device(self) -> str:
+        """Detect and return the best available device for PyTorch"""
+        try:
+            # Check for forced CPU mode
+            if os.getenv("FORCE_CPU", "").lower() == "true":
+                logger.info("FORCE_CPU is set, using CPU mode")
+                return "cpu"
+            
+            # Check for GPU availability
+            if torch.cuda.is_available():
+                device_count = torch.cuda.device_count()
+                device_name = torch.cuda.get_device_name(0)
+                logger.info(f"CUDA GPU available: {device_name} (Total devices: {device_count})")
+                return "cuda"
+            else:
+                logger.info("CUDA not available, using CPU")
+                return "cpu"
+        except Exception as e:
+            logger.warning(f"Error detecting device: {e}, defaulting to CPU")
+            return "cpu"

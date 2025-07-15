@@ -1,12 +1,7 @@
 fastapi==0.104.1
 uvicorn==0.24.0
 yt-dlp==2025.6.30
-# Note: PyTorch is installed in Dockerfile with GPU/CPU auto-detection
 openai-whisper==20231117
-numba
-tqdm
-more-itertools
-tiktoken
 ollama==0.1.7
 pydantic==2.5.0
 websockets==12.0
