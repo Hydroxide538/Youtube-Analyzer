@@ -20,6 +20,8 @@ services:
           memory: 4G
         reservations:
           memory: 2G
+    # GPU configuration
+    runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
