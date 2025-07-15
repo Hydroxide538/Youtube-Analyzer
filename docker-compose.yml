@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  youtube-summarizer:
+    build: .
+    container_name: youtube-summarizer
+    ports:
+      - "8000:8000"
+    volumes:
+      - temp_files:/app/temp
+      - app_logs:/app/logs
+    environment:
+      - PYTHONPATH=/app
+      - OLLAMA_HOST=ollama:11434
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    depends_on:
+      - ollama
+    networks:
+      - youtube-summarizer-network
+
+  # External Ollama service (comment out if using existing container)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+    networks:
+      - youtube-summarizer-network
+
+volumes:
+  ollama_models:
+    driver: local
+  temp_files:
+    driver: local
+  app_logs:
+    driver: local
+
+networks:
+  youtube-summarizer-network:
+    driver: bridge
+    name: youtube-summarizer-network
+
+# Alternative configuration for existing Ollama container:
+# 1. Comment out the 'ollama' service above
+# 2. Update OLLAMA_HOST to point to your existing container
+# 3. Ensure both containers are on the same network
+# 
+# Example for external Ollama:
+# environment:
+#   - OLLAMA_HOST=your-ollama-container:11434
+# 
+# Or if using host networking:
+# environment:
+#   - OLLAMA_HOST=host.docker.internal:11434
+# 
+# networks:
+#   default:
+#     external:
+#       name: your-existing-network

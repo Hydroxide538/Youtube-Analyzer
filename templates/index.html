@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Summarizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fab fa-youtube"></i> YouTube Video Summarizer</h1>
+                <p>Get AI-powered summaries of YouTube videos using local processing</p>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Input Section -->
+            <section class="input-section">
+                <div class="input-container">
+                    <form id="videoForm" class="video-form">
+                        <div class="form-group">
+                            <label for="videoUrl">YouTube Video URL</label>
+                            <div class="input-wrapper">
+                                <input 
+                                    type="url" 
+                                    id="videoUrl" 
+                                    name="videoUrl" 
+                                    placeholder="https://www.youtube.com/watch?v=..." 
+                                    required
+                                >
+                                <button type="submit" id="submitBtn" class="submit-btn">
+                                    <i class="fas fa-play"></i>
+                                    Analyze Video
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="advanced-options" id="advancedOptions">
+                            <h3>Advanced Options</h3>
+                            <div class="options-grid">
+                                <div class="option-group">
+                                    <label for="aiModel">AI Model</label>
+                                    <select id="aiModel" name="aiModel">
+                                        <option value="">Loading models...</option>
+                                    </select>
+                                    <div class="model-info" id="modelInfo">
+                                        <i class="fas fa-info-circle"></i>
+                                        <span id="modelInfoText">Select a model to see details</span>
+                                    </div>
+                                </div>
+                                <div class="option-group">
+                                    <label for="maxSegments">Max Key Segments</label>
+                                    <select id="maxSegments" name="maxSegments">
+                                        <option value="3">3 segments</option>
+                                        <option value="5" selected>5 segments</option>
+                                        <option value="7">7 segments</option>
+                                        <option value="10">10 segments</option>
+                                    </select>
+                                </div>
+                                <div class="option-group">
+                                    <label for="segmentLength">Segment Length</label>
+                                    <select id="segmentLength" name="segmentLength">
+                                        <option value="30">30 seconds</option>
+                                        <option value="60" selected>60 seconds</option>
+                                        <option value="90">90 seconds</option>
+                                        <option value="120">120 seconds</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button type="button" id="toggleAdvanced" class="toggle-advanced">
+                            <i class="fas fa-cog"></i> Advanced Options
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Progress Section -->
+            <section class="progress-section" id="progressSection" style="display: none;">
+                <div class="progress-container">
+                    <div class="progress-header">
+                        <h3 id="progressTitle">Processing Video...</h3>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-message" id="progressMessage">
+                        Initializing...
+                    </div>
+                    <div class="progress-steps">
+                        <div class="step" id="step-download">
+                            <i class="fas fa-download"></i>
+                            <span>Download</span>
+                        </div>
+                        <div class="step" id="step-audio">
+                            <i class="fas fa-waveform-lines"></i>
+                            <span>Audio Processing</span>
+                        </div>
+                        <div class="step" id="step-transcribe">
+                            <i class="fas fa-microphone"></i>
+                            <span>Transcription</span>
+                        </div>
+                        <div class="step" id="step-analyze">
+                            <i class="fas fa-brain"></i>
+                            <span>Analysis</span>
+                        </div>
+                        <div class="step" id="step-summarize">
+                            <i class="fas fa-file-text"></i>
+                            <span>Summarization</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-container">
+                    <div class="results-header">
+                        <h2 id="videoTitle">Video Summary</h2>
+                        <div class="video-info">
+                            <span id="videoDuration" class="duration-badge"></span>
+                            <span id="segmentCount" class="segment-badge"></span>
+                            <span id="modelUsed" class="model-badge"></span>
+                        </div>
+                    </div>
+
+                    <!-- Overall Summary -->
+                    <div class="overall-summary" id="overallSummary" style="display: none;">
+                        <h3><i class="fas fa-file-alt"></i> Overall Summary</h3>
+                        <div class="summary-content" id="overallSummaryContent"></div>
+                        <div class="themes-takeaways">
+                            <div class="themes" id="mainThemes" style="display: none;">
+                                <h4>Main Themes</h4>
+                                <ul id="themesList"></ul>
+                            </div>
+                            <div class="takeaways" id="keyTakeaways" style="display: none;">
+                                <h4>Key Takeaways</h4>
+                                <ul id="takeawaysList"></ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Segment Summaries -->
+                    <div class="segments-container" id="segmentsContainer">
+                        <h3><i class="fas fa-list"></i> Key Segments</h3>
+                        <div class="segments-list" id="segmentsList">
+                            <!-- Segments will be populated here -->
+                        </div>
+                    </div>
+
+                    <!-- Export Options -->
+                    <div class="export-section">
+                        <h3><i class="fas fa-download"></i> Export Summary</h3>
+                        <div class="export-buttons">
+                            <button id="exportText" class="export-btn">
+                                <i class="fas fa-file-text"></i> Export as Text
+                            </button>
+                            <button id="exportJson" class="export-btn">
+                                <i class="fas fa-code"></i> Export as JSON
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section class="error-section" id="errorSection" style="display: none;">
+                <div class="error-container">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3>Processing Error</h3>
+                    <p id="errorMessage">An error occurred while processing the video.</p>
+                    <button id="retryBtn" class="retry-btn">
+                        <i class="fas fa-redo"></i> Try Again
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2025 YouTube Video Summarizer - Powered by Local AI</p>
+        </footer>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Connecting to processing service...</p>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
