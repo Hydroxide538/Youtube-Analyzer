@@ -62,7 +62,11 @@ def install_dependencies():
     """Install Python dependencies"""
     print("📦 Installing Python dependencies...")
     try:
-        subprocess.run([sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt'], 
+        # Get the parent directory path for requirements.txt
+        parent_dir = Path(__file__).parent.parent
+        requirements_path = parent_dir / 'requirements.txt'
+        
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '-r', str(requirements_path)], 
                       check=True, capture_output=True)
         print("✅ Dependencies installed successfully")
         return True
@@ -72,6 +76,10 @@ def install_dependencies():
 
 def create_directories():
     """Create necessary directories"""
+    # Change to parent directory where directories should be created
+    parent_dir = Path(__file__).parent.parent
+    os.chdir(parent_dir)
+    
     directories = ['temp', 'logs']
     for directory in directories:
         Path(directory).mkdir(exist_ok=True)
@@ -84,6 +92,10 @@ def start_application():
     print("   Press Ctrl+C to stop")
     
     try:
+        # Change to parent directory where app module is located
+        parent_dir = Path(__file__).parent.parent
+        os.chdir(parent_dir)
+        
         subprocess.run([
             sys.executable, '-m', 'uvicorn', 
             'app.main:app', 

@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   youtube-summarizer:
-    build: .
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: youtube-summarizer
     ports:
       - "8000:8000"
@@ -11,7 +13,7 @@ services:
       - app_logs:/app/logs
     environment:
       - PYTHONPATH=/app
-      - OLLAMA_HOST=host.docker.internal:11434  # For bridge networking
+      - OLLAMA_HOST=host.docker.internal:11434  # Change this to your Ollama container host
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -25,8 +27,7 @@ services:
           memory: 4G
         reservations:
           memory: 2G
-    extra_hosts:
-      - "host.docker.internal:host-gateway"  # Ensures host.docker.internal works
+    network_mode: "host"  # Use host networking to access external Ollama
 
 volumes:
   temp_files:
@@ -34,10 +35,14 @@ volumes:
   app_logs:
     driver: local
 
-# This configuration uses bridge networking with host.docker.internal
-# to access your existing Ollama container
-# 
-# Access the application at: http://localhost:8000
+# Alternative network configuration for existing Ollama container:
+# If your Ollama container is on a specific network, use this instead:
 #
-# To use this configuration:
-# docker-compose -f docker-compose.bridge.yml up --build
+# networks:
+#   default:
+#     external:
+#       name: your-existing-ollama-network
+#
+# And update the environment variable:
+# environment:
+#   - OLLAMA_HOST=your-ollama-container:11434

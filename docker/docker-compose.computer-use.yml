@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: youtube-analyzer-ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - youtube-analyzer-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  youtube-analyzer:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: youtube-analyzer-app
+    depends_on:
+      ollama:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_HOST=ollama:11434
+      - COMPUTER_USE_ENABLED=true
+      - LLAMA4_API_URL=http://ollama:11434/v1
+      - LLAMA4_MODEL=llama3.1:8b
+      - UITARS_API_URL=http://ollama:11434/v1
+      - UITARS_MODEL=llama3.1:8b
+      - COMPUTER_USE_MAX_ITERATIONS=20
+      - COMPUTER_USE_SCREENSHOT_DELAY=2.0
+      - COMPUTER_USE_ACTION_DELAY=1.0
+      - COMPUTER_USE_BROWSER_TIMEOUT=60
+      - COMPUTER_USE_DISPLAY_SIZE=1920x1080
+      - DISPLAY=:99
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - youtube_temp:/app/temp
+      - youtube_logs:/app/logs
+    networks:
+      - youtube-analyzer-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Add capabilities for GUI applications
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    shm_size: 2gb
+
+volumes:
+  ollama_data:
+    driver: local
+  youtube_temp:
+    driver: local
+  youtube_logs:
+    driver: local
+
+networks:
+  youtube-analyzer-network:
+    driver: bridge

@@ -1,18 +1,21 @@
 services:
   youtube-summarizer:
-    build: .
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: youtube-summarizer
     ports:
-      - "8000:8000"  # This will show in docker ps
+      - "8000:8000"
     volumes:
       - temp_files:/app/temp
       - app_logs:/app/logs
     environment:
       - PYTHONPATH=/app
-      - OLLAMA_HOST=host.docker.internal:11434  # For bridge networking
-      - FORCE_CPU=true  # Force CPU mode
+      - OLLAMA_HOST=host.docker.internal:11434
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     restart: unless-stopped
-    # CPU-only configuration - no GPU devices
+    runtime: nvidia
     deploy:
       resources:
         limits:
@@ -26,14 +29,10 @@ services:
       retries: 3
       start_period: 60s
     extra_hosts:
-      - "host.docker.internal:host-gateway"  # Ensures host.docker.internal works
+      - "host.docker.internal:host-gateway"
 
 volumes:
   temp_files:
     driver: local
   app_logs:
     driver: local
-
-# CPU-only configuration for systems without GPU support
-# This removes all GPU-related configurations while maintaining
-# the same functionality on CPU hardware

@@ -1,0 +1,137 @@
+# Development-optimized Dockerfile for YouTube Video Summarizer
+FROM python:3.11-slim as base
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_DEFAULT_TIMEOUT=300
+ENV PIP_RETRIES=3
+ENV PIP_TIMEOUT=300
+
+# Install system dependencies including Chrome (cached layer)
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    wget \
+    git \
+    build-essential \
+    gnupg \
+    ca-certificates \
+    unzip \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install chromedriver (cached layer)
+RUN CHROME_VERSION=$(google-chrome --version | cut -d " " -f3 | cut -d "." -f1) \
+    && CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}") \
+    && wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip" \
+    && unzip /tmp/chromedriver.zip -d /tmp \
+    && mv /tmp/chromedriver /usr/local/bin/chromedriver \
+    && chmod +x /usr/local/bin/chromedriver \
+    && rm /tmp/chromedriver.zip
+
+# Create app directory
+WORKDIR /app
+
+# Upgrade pip and install build tools (cached layer)
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Copy requirements files first for better caching
+COPY requirements.txt ./
+
+# Install PyTorch CPU version directly (cached layer - only rebuilds if requirements change)
+RUN pip install --no-cache-dir --timeout=300 --retries=3 \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining dependencies (cached layer - only rebuilds if requirements change)
+RUN pip install --no-cache-dir --timeout=300 --retries=3 -r requirements.txt
+
+# Create GPU detection script (cached layer)
+RUN echo 'import torch\n\
+import sys\n\
+import os\n\
+\n\
+def detect_gpu():\n\
+    try:\n\
+        if torch.cuda.is_available():\n\
+            device_count = torch.cuda.device_count()\n\
+            device_name = torch.cuda.get_device_name(0) if device_count > 0 else "Unknown"\n\
+            print(f"GPU acceleration available: {device_name} ({device_count} device(s))")\n\
+            return True\n\
+        else:\n\
+            print("No GPU acceleration available, using CPU")\n\
+            return False\n\
+    except Exception as e:\n\
+        print(f"Error detecting GPU: {e}, falling back to CPU")\n\
+        return False\n\
+\n\
+if __name__ == "__main__":\n\
+    gpu_available = detect_gpu()\n\
+    os.environ["GPU_AVAILABLE"] = str(gpu_available)\n\
+    print(f"GPU_AVAILABLE={gpu_available}")' > /app/gpu_detect.py
+
+# Create necessary directories
+RUN mkdir -p /app/temp /app/logs
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Create development startup script with auto-reload
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+# Detect GPU capabilities\n\
+echo "Detecting GPU capabilities..."\n\
+python /app/gpu_detect.py\n\
+\n\
+# Wait for external Ollama service to be ready\n\
+echo "Waiting for external Ollama service..."\n\
+OLLAMA_HOST=${OLLAMA_HOST:-ollama:11434}\n\
+echo "Checking Ollama at $OLLAMA_HOST"\n\
+\n\
+# Wait for Ollama to be available\n\
+for i in {1..30}; do\n\
+    if curl -s http://$OLLAMA_HOST/api/tags > /dev/null 2>&1; then\n\
+        echo "Ollama service is ready!"\n\
+        break\n\
+    fi\n\
+    echo "Waiting for Ollama... ($i/30)"\n\
+    sleep 5\n\
+done\n\
+\n\
+# Validate static file serving\n\
+echo "Validating static file serving..."\n\
+cd /app\n\
+echo "Current working directory: $(pwd)"\n\
+echo "Listing contents of /app:"\n\
+ls -la /app/\n\
+echo "Checking static directory:"\n\
+ls -la /app/static/ || echo "Static directory not found"\n\
+echo "Checking templates directory:"\n\
+ls -la /app/templates/ || echo "Templates directory not found"\n\
+echo "Checking app directory:"\n\
+ls -la /app/app/ || echo "App directory not found"\n\
+\n\
+# Test that Python can access the static files\n\
+echo "Testing Python access to static files..."\n\
+python -c "import os; print('"'"'Static files accessible:'"'"', os.path.exists('"'"'/app/static/css/style.css'"'"'), os.path.exists('"'"'/app/static/js/app.js'"'"'))"\n\
+python -c "import os; print('"'"'Templates accessible:'"'"', os.path.exists('"'"'/app/templates/index.html'"'"'))"\n\
+\n\
+# Start the FastAPI application with auto-reload for development\n\
+echo "Starting YouTube Summarizer in DEVELOPMENT mode with auto-reload..."\n\
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app --reload-dir /app/static --reload-dir /app/templates\n\
+' > /app/start_dev.sh && chmod +x /app/start_dev.sh
+
+# NOTE: Application code will be mounted as volumes in development
+# This means code changes will be reflected immediately without rebuilding
+
+# Run the development startup script
+CMD ["/app/start_dev.sh"]

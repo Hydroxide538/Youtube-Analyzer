@@ -22,13 +22,22 @@
                 <div class="input-container">
                     <form id="videoForm" class="video-form">
                         <div class="form-group">
-                            <label for="videoUrl">YouTube Video URL</label>
+                            <label for="videoType">Video Type</label>
+                            <select id="videoType" name="videoType" onchange="handleVideoTypeChange()">
+                                <option value="auto">Auto-detect</option>
+                                <option value="youtube">YouTube</option>
+                                <option value="conference">Conference Video</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="videoUrl" id="videoUrlLabel">Video URL</label>
                             <div class="input-wrapper">
                                 <input 
                                     type="url" 
                                     id="videoUrl" 
                                     name="videoUrl" 
-                                    placeholder="https://www.youtube.com/watch?v=..." 
+                                    placeholder="https://www.youtube.com/watch?v=... or conference URL" 
                                     required
                                 >
                                 <button type="submit" id="submitBtn" class="submit-btn">
@@ -38,36 +47,152 @@
                             </div>
                         </div>
                         
+                        <div class="auth-section" id="authSection" style="display: none;">
+                            <h3>Authentication (Optional)</h3>
+                            <div class="auth-grid">
+                                <div class="form-group">
+                                    <label for="username">Username/Email</label>
+                                    <input 
+                                        type="text" 
+                                        id="username" 
+                                        name="username" 
+                                        placeholder="Enter your username or email"
+                                        autocomplete="username"
+                                    >
+                                </div>
+                                <div class="form-group">
+                                    <label for="password">Password</label>
+                                    <input 
+                                        type="password" 
+                                        id="password" 
+                                        name="password" 
+                                        placeholder="Enter your password"
+                                        autocomplete="current-password"
+                                    >
+                                </div>
+                            </div>
+                            <div class="auth-note">
+                                <i class="fas fa-info-circle"></i>
+                                <span>Authentication is only required for conference videos that need login. Your credentials are not stored.</span>
+                            </div>
+                        </div>
+                        
                         <div class="advanced-options" id="advancedOptions">
                             <h3>Advanced Options</h3>
-                            <div class="options-grid">
-                                <div class="option-group">
-                                    <label for="aiModel">AI Model</label>
-                                    <select id="aiModel" name="aiModel">
-                                        <option value="">Loading models...</option>
-                                    </select>
-                                    <div class="model-info" id="modelInfo">
-                                        <i class="fas fa-info-circle"></i>
-                                        <span id="modelInfoText">Select a model to see details</span>
+                            
+                            <!-- API Keys Section -->
+                            <div class="api-keys-section">
+                                <h4><i class="fas fa-key"></i> API Keys (Optional)</h4>
+                                <div class="api-keys-note">
+                                    <i class="fas fa-info-circle"></i>
+                                    <span>Provide API keys to access cloud models. Leave empty to use local Ollama models only.</span>
+                                </div>
+                                <div class="api-keys-grid">
+                                    <div class="api-key-group">
+                                        <label for="openaiApiKey">OpenAI API Key</label>
+                                        <div class="api-key-input-wrapper">
+                                            <input 
+                                                type="password" 
+                                                id="openaiApiKey" 
+                                                name="openaiApiKey" 
+                                                placeholder="sk-..." 
+                                                autocomplete="off"
+                                            >
+                                            <button type="button" class="toggle-key-visibility" onclick="toggleApiKeyVisibility('openaiApiKey')">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </div>
+                                        <div class="api-key-status" id="openaiStatus">
+                                            <i class="fas fa-circle"></i>
+                                            <span>Not configured</span>
+                                        </div>
+                                    </div>
+                                    <div class="api-key-group">
+                                        <label for="anthropicApiKey">Anthropic API Key</label>
+                                        <div class="api-key-input-wrapper">
+                                            <input 
+                                                type="password" 
+                                                id="anthropicApiKey" 
+                                                name="anthropicApiKey" 
+                                                placeholder="sk-ant-..." 
+                                                autocomplete="off"
+                                            >
+                                            <button type="button" class="toggle-key-visibility" onclick="toggleApiKeyVisibility('anthropicApiKey')">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </div>
+                                        <div class="api-key-status" id="anthropicStatus">
+                                            <i class="fas fa-circle"></i>
+                                            <span>Not configured</span>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="option-group">
-                                    <label for="maxSegments">Max Key Segments</label>
-                                    <select id="maxSegments" name="maxSegments">
-                                        <option value="3">3 segments</option>
-                                        <option value="5" selected>5 segments</option>
-                                        <option value="7">7 segments</option>
-                                        <option value="10">10 segments</option>
-                                    </select>
+                                <div class="api-keys-actions">
+                                    <button type="button" id="testApiKeysBtn" class="test-keys-btn">
+                                        <i class="fas fa-check-circle"></i> Test API Keys
+                                    </button>
+                                    <button type="button" id="refreshModelsBtn" class="refresh-models-btn">
+                                        <i class="fas fa-sync"></i> Refresh Models
+                                    </button>
                                 </div>
-                                <div class="option-group">
-                                    <label for="segmentLength">Segment Length</label>
-                                    <select id="segmentLength" name="segmentLength">
-                                        <option value="30">30 seconds</option>
-                                        <option value="60" selected>60 seconds</option>
-                                        <option value="90">90 seconds</option>
-                                        <option value="120">120 seconds</option>
-                                    </select>
+                            </div>
+                            
+                            <!-- Model Selection -->
+                            <div class="model-selection-section">
+                                <h4><i class="fas fa-robot"></i> Model Selection</h4>
+                                <div class="options-grid">
+                                    <div class="option-group model-group">
+                                        <label for="aiModel">AI Model</label>
+                                        <select id="aiModel" name="aiModel">
+                                            <option value="">Loading models...</option>
+                                        </select>
+                                        <div class="model-info" id="modelInfo">
+                                            <i class="fas fa-info-circle"></i>
+                                            <span id="modelInfoText">Select a model to see details</span>
+                                        </div>
+                                    </div>
+                                    <div class="provider-status" id="providerStatus">
+                                        <h5>Provider Status</h5>
+                                        <div class="status-grid">
+                                            <div class="status-item" id="ollamaProviderStatus">
+                                                <i class="fas fa-circle"></i>
+                                                <span>Ollama: Checking...</span>
+                                            </div>
+                                            <div class="status-item" id="openaiProviderStatus">
+                                                <i class="fas fa-circle"></i>
+                                                <span>OpenAI: Not configured</span>
+                                            </div>
+                                            <div class="status-item" id="anthropicProviderStatus">
+                                                <i class="fas fa-circle"></i>
+                                                <span>Anthropic: Not configured</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Processing Options -->
+                            <div class="processing-options-section">
+                                <h4><i class="fas fa-cogs"></i> Processing Options</h4>
+                                <div class="options-grid">
+                                    <div class="option-group">
+                                        <label for="maxSegments">Max Key Segments</label>
+                                        <select id="maxSegments" name="maxSegments">
+                                            <option value="3">3 segments</option>
+                                            <option value="5" selected>5 segments</option>
+                                            <option value="7">7 segments</option>
+                                            <option value="10">10 segments</option>
+                                        </select>
+                                    </div>
+                                    <div class="option-group">
+                                        <label for="segmentLength">Segment Length</label>
+                                        <select id="segmentLength" name="segmentLength">
+                                            <option value="30">30 seconds</option>
+                                            <option value="60" selected>60 seconds</option>
+                                            <option value="90">90 seconds</option>
+                                            <option value="120">120 seconds</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -197,5 +322,29 @@
     </div>
 
     <script src="/static/js/app.js"></script>
+    <script>
+        // Global function to handle video type changes
+        function handleVideoTypeChange() {
+            // Get the instance of YouTubeSummarizer from the global window
+            if (window.youtubeSummarizer) {
+                window.youtubeSummarizer.handleVideoTypeChange();
+            }
+        }
+        
+        // Global function to toggle API key visibility
+        function toggleApiKeyVisibility(inputId) {
+            const input = document.getElementById(inputId);
+            const button = input.nextElementSibling;
+            const icon = button.querySelector('i');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fas fa-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'fas fa-eye';
+            }
+        }
+    </script>
 </body>
 </html>

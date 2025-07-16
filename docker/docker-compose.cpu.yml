@@ -1,6 +1,8 @@
 services:
   youtube-summarizer:
-    build: .
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: youtube-summarizer
     ports:
       - "8000:8000"  # This will show in docker ps
@@ -10,18 +12,15 @@ services:
     environment:
       - PYTHONPATH=/app
       - OLLAMA_HOST=host.docker.internal:11434  # For bridge networking
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - FORCE_CPU=true  # Force CPU mode
     restart: unless-stopped
-    # Memory limits
+    # CPU-only configuration - no GPU devices
     deploy:
       resources:
         limits:
           memory: 4G
         reservations:
           memory: 2G
-    # GPU configuration
-    runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -37,6 +36,6 @@ volumes:
   app_logs:
     driver: local
 
-# For GPU support, run with: docker compose --profile gpu up --build
-# Or use the docker run command with --gpus all flag
-# The environment variables above will enable GPU detection when available
+# CPU-only configuration for systems without GPU support
+# This removes all GPU-related configurations while maintaining
+# the same functionality on CPU hardware

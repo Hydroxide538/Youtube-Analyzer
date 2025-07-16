@@ -1,0 +1,56 @@
+version: '3.8'
+services:
+  youtube-summarizer:
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    container_name: youtube-summarizer-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      # Live code mounting - changes reflect immediately
+      - ../app:/app/app
+      - ../static:/app/static
+      - ../templates:/app/templates
+      - ../requirements.txt:/app/requirements.txt
+      
+      # Persistent data volumes
+      - temp_files:/app/temp
+      - app_logs:/app/logs
+      
+      # Optional: Mount the entire project for debugging (uncomment if needed)
+      # - ..:/workspace
+      
+    environment:
+      - PYTHONPATH=/app
+      - OLLAMA_HOST=host.docker.internal:11434
+      - ENVIRONMENT=development
+      - DEBUG=true
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    # Development-specific settings
+    stdin_open: true
+    tty: true
+    
+    # Override command for development if needed
+    # command: /app/start_dev.sh
+
+volumes:
+  temp_files:
+    driver: local
+  app_logs:
+    driver: local

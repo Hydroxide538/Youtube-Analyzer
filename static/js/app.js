@@ -13,7 +13,9 @@ class YouTubeSummarizer {
     initializeElements() {
         // Form elements
         this.videoForm = document.getElementById('videoForm');
+        this.videoTypeSelect = document.getElementById('videoType');
         this.videoUrlInput = document.getElementById('videoUrl');
+        this.videoUrlLabel = document.getElementById('videoUrlLabel');
         this.submitBtn = document.getElementById('submitBtn');
         this.toggleAdvancedBtn = document.getElementById('toggleAdvanced');
         this.advancedOptions = document.getElementById('advancedOptions');
@@ -22,6 +24,24 @@ class YouTubeSummarizer {
         this.aiModelSelect = document.getElementById('aiModel');
         this.modelInfo = document.getElementById('modelInfo');
         this.modelInfoText = document.getElementById('modelInfoText');
+        
+        // API Key elements
+        this.openaiApiKeyInput = document.getElementById('openaiApiKey');
+        this.anthropicApiKeyInput = document.getElementById('anthropicApiKey');
+        this.testApiKeysBtn = document.getElementById('testApiKeysBtn');
+        this.refreshModelsBtn = document.getElementById('refreshModelsBtn');
+        this.openaiStatus = document.getElementById('openaiStatus');
+        this.anthropicStatus = document.getElementById('anthropicStatus');
+        
+        // Provider status elements
+        this.ollamaProviderStatus = document.getElementById('ollamaProviderStatus');
+        this.openaiProviderStatus = document.getElementById('openaiProviderStatus');
+        this.anthropicProviderStatus = document.getElementById('anthropicProviderStatus');
+        
+        // Authentication elements
+        this.authSection = document.getElementById('authSection');
+        this.usernameInput = document.getElementById('username');
+        this.passwordInput = document.getElementById('password');
         
         // Progress elements
         this.progressSection = document.getElementById('progressSection');
@@ -82,6 +102,17 @@ class YouTubeSummarizer {
         
         // Model selection
         this.aiModelSelect.addEventListener('change', () => this.updateModelInfo());
+        
+        // Video type selection
+        this.videoTypeSelect.addEventListener('change', () => this.handleVideoTypeChange());
+        
+        // API key input listeners
+        this.openaiApiKeyInput.addEventListener('input', () => this.validateApiKey('openai'));
+        this.anthropicApiKeyInput.addEventListener('input', () => this.validateApiKey('anthropic'));
+        
+        // API key buttons
+        this.testApiKeysBtn.addEventListener('click', () => this.testApiKeys());
+        this.refreshModelsBtn.addEventListener('click', () => this.refreshModels());
     }
     
     initializeWebSocket() {
@@ -127,8 +158,10 @@ class YouTubeSummarizer {
         }
         
         const url = this.videoUrlInput.value.trim();
-        if (!this.isValidYouTubeUrl(url)) {
-            this.showError('Please enter a valid YouTube URL.');
+        const videoType = this.videoTypeSelect.value;
+        
+        if (!this.isValidUrl(url, videoType)) {
+            this.showError('Please enter a valid video URL.');
             return;
         }
         
@@ -156,7 +189,10 @@ class YouTubeSummarizer {
             url: url,
             model: this.aiModelSelect.value || 'llama3.1:8b',
             max_segments: parseInt(this.maxSegmentsSelect.value),
-            segment_length: parseInt(this.segmentLengthSelect.value)
+            segment_length: parseInt(this.segmentLengthSelect.value),
+            video_type: this.videoTypeSelect.value,
+            username: this.usernameInput.value.trim() || null,
+            password: this.passwordInput.value.trim() || null
         };
         
         if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
@@ -200,6 +236,11 @@ class YouTubeSummarizer {
                 this.setStepCompleted('analyze');
                 break;
                 
+            case 'overall_summary':
+                this.updateProgress(progress, message);
+                // Keep summarize step active during overall summary generation
+                break;
+                
             case 'completed':
                 this.updateProgress(100, message);
                 this.setStepCompleted('summarize');
@@ -229,7 +270,7 @@ class YouTubeSummarizer {
     }
     
     displayResults(result) {
-        const { video_title, video_duration, summaries, model_used } = result;
+        const { video_title, video_duration, summaries, overall_summary, model_used } = result;
         
         // Set video info
         this.videoTitle.textContent = video_title || 'Video Summary';
@@ -245,8 +286,13 @@ class YouTubeSummarizer {
         // Display segment summaries
         this.displaySegmentSummaries(summaries);
         
-        // Generate and display overall summary
-        this.generateOverallSummary(summaries, video_title);
+        // Display enhanced overall summary from backend
+        if (overall_summary) {
+            this.displayEnhancedOverallSummary(overall_summary);
+        } else {
+            // Fallback to simple summary generation
+            this.generateOverallSummary(summaries, video_title);
+        }
         
         // Show results section
         this.showResultsSection();
@@ -299,10 +345,30 @@ class YouTubeSummarizer {
         return card;
     }
     
-    generateOverallSummary(summaries, videoTitle) {
-        // For now, create a simple overall summary
-        // In a full implementation, this could call the backend for a comprehensive summary
+    displayEnhancedOverallSummary(overallSummary) {
+        // Display the enhanced overall summary from the backend
+        const { overall_summary, main_themes, key_takeaways } = overallSummary;
         
+        // Display the main overall summary
+        if (overall_summary) {
+            this.overallSummaryContent.textContent = overall_summary;
+        }
+        
+        // Display themes from backend
+        if (main_themes && main_themes.length > 0) {
+            this.displayThemes(main_themes);
+        }
+        
+        // Display takeaways from backend
+        if (key_takeaways && key_takeaways.length > 0) {
+            this.displayTakeaways(key_takeaways);
+        }
+        
+        this.overallSummary.style.display = 'block';
+    }
+    
+    generateOverallSummary(summaries, videoTitle) {
+        // Fallback method for when backend overall summary is not available
         const totalDuration = summaries.reduce((sum, segment) => sum + segment.duration, 0);
         const avgImportance = summaries.reduce((sum, segment) => sum + segment.importance_score, 0) / summaries.length;
         
@@ -459,7 +525,8 @@ class YouTubeSummarizer {
     
     validateUrl() {
         const url = this.videoUrlInput.value.trim();
-        const isValid = this.isValidYouTubeUrl(url);
+        const videoType = this.videoTypeSelect.value;
+        const isValid = this.isValidUrl(url, videoType);
         
         if (url && !isValid) {
             this.videoUrlInput.style.borderColor = '#dc3545';
@@ -510,6 +577,11 @@ class YouTubeSummarizer {
                 this.populateModelDropdown(data.models);
                 this.modelInfo.classList.remove('loading');
                 this.updateModelInfo();
+                
+                // Update provider status from response
+                if (data.providers) {
+                    this.updateProviderStatusFromResponse(data.providers);
+                }
             } else {
                 throw new Error(data.detail || 'Failed to load models');
             }
@@ -521,6 +593,11 @@ class YouTubeSummarizer {
             
             // Add default model as fallback
             this.aiModelSelect.innerHTML = '<option value="llama3.1:8b">llama3.1:8b (Default)</option>';
+            
+            // Set all providers as unavailable
+            this.updateProviderStatus(this.ollamaProviderStatus, 'unavailable', 'Ollama: Unavailable');
+            this.updateProviderStatus(this.openaiProviderStatus, 'not-configured', 'OpenAI: Not configured');
+            this.updateProviderStatus(this.anthropicProviderStatus, 'not-configured', 'Anthropic: Not configured');
         }
     }
     
@@ -626,11 +703,322 @@ class YouTubeSummarizer {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
+    
+    // Video Type Management
+    handleVideoTypeChange() {
+        const videoType = this.videoTypeSelect.value;
+        
+        // Update UI based on video type
+        if (videoType === 'conference') {
+            this.authSection.style.display = 'block';
+            this.videoUrlLabel.textContent = 'Conference Video URL';
+            this.videoUrlInput.placeholder = 'Enter conference video URL (e.g., Zoom, Teams, etc.)';
+        } else if (videoType === 'youtube') {
+            this.authSection.style.display = 'none';
+            this.videoUrlLabel.textContent = 'YouTube Video URL';
+            this.videoUrlInput.placeholder = 'https://www.youtube.com/watch?v=...';
+        } else {
+            this.authSection.style.display = 'none';
+            this.videoUrlLabel.textContent = 'Video URL';
+            this.videoUrlInput.placeholder = 'https://www.youtube.com/watch?v=... or conference URL';
+        }
+        
+        // Clear validation styling
+        this.videoUrlInput.style.borderColor = '#e1e8ed';
+        
+        // Re-validate current URL
+        this.validateUrl();
+    }
+    
+    isValidUrl(url, videoType) {
+        if (!url) return false;
+        
+        switch (videoType) {
+            case 'youtube':
+                return this.isValidYouTubeUrl(url);
+            case 'conference':
+                return this.isValidConferenceUrl(url);
+            case 'auto':
+                return this.isValidYouTubeUrl(url) || this.isValidConferenceUrl(url);
+            default:
+                return false;
+        }
+    }
+    
+    isValidConferenceUrl(url) {
+        // Basic URL validation for conference videos
+        const conferencePatterns = [
+            /^https?:\/\/.+zoom\.us\/rec\/.+/i,
+            /^https?:\/\/.+teams\.microsoft\.com\/.+/i,
+            /^https?:\/\/.+webex\.com\/.+/i,
+            /^https?:\/\/.+gotomeeting\.com\/.+/i,
+            /^https?:\/\/.+meet\.google\.com\/.+/i,
+            /^https?:\/\/.+bluejeans\.com\/.+/i,
+            // Generic URL pattern for other conference platforms
+            /^https?:\/\/.+\.(com|org|net|edu)\/.+/i
+        ];
+        
+        return conferencePatterns.some(pattern => pattern.test(url));
+    }
+    
+    // API Key Management
+    validateApiKey(provider) {
+        const input = provider === 'openai' ? this.openaiApiKeyInput : this.anthropicApiKeyInput;
+        const status = provider === 'openai' ? this.openaiStatus : this.anthropicStatus;
+        const providerStatus = provider === 'openai' ? this.openaiProviderStatus : this.anthropicProviderStatus;
+        
+        const key = input.value.trim();
+        
+        if (!key) {
+            this.updateApiKeyStatus(status, 'not-configured', 'Not configured');
+            this.updateProviderStatus(providerStatus, 'not-configured', `${provider.charAt(0).toUpperCase() + provider.slice(1)}: Not configured`);
+            return;
+        }
+        
+        // Basic format validation
+        const isValidFormat = provider === 'openai' ? 
+            key.startsWith('sk-') && key.length > 20 : 
+            key.startsWith('sk-ant-') && key.length > 20;
+        
+        if (isValidFormat) {
+            this.updateApiKeyStatus(status, 'valid', 'Key format valid');
+            this.updateProviderStatus(providerStatus, 'pending', `${provider.charAt(0).toUpperCase() + provider.slice(1)}: Key provided (not tested)`);
+        } else {
+            this.updateApiKeyStatus(status, 'invalid', 'Invalid key format');
+            this.updateProviderStatus(providerStatus, 'error', `${provider.charAt(0).toUpperCase() + provider.slice(1)}: Invalid key format`);
+        }
+    }
+    
+    updateApiKeyStatus(element, status, message) {
+        const icon = element.querySelector('i');
+        const text = element.querySelector('span');
+        
+        // Reset classes
+        element.classList.remove('valid', 'invalid', 'not-configured', 'testing');
+        
+        // Set new status
+        element.classList.add(status);
+        text.textContent = message;
+        
+        // Update icon
+        switch (status) {
+            case 'valid':
+                icon.className = 'fas fa-check-circle';
+                break;
+            case 'invalid':
+                icon.className = 'fas fa-exclamation-circle';
+                break;
+            case 'testing':
+                icon.className = 'fas fa-spinner fa-spin';
+                break;
+            default:
+                icon.className = 'fas fa-circle';
+        }
+    }
+    
+    updateProviderStatus(element, status, message) {
+        const icon = element.querySelector('i');
+        const text = element.querySelector('span');
+        
+        // Reset classes
+        element.classList.remove('available', 'unavailable', 'not-configured', 'error', 'pending');
+        
+        // Set new status
+        element.classList.add(status);
+        text.textContent = message;
+        
+        // Update icon
+        switch (status) {
+            case 'available':
+                icon.className = 'fas fa-check-circle';
+                break;
+            case 'unavailable':
+            case 'error':
+                icon.className = 'fas fa-times-circle';
+                break;
+            case 'pending':
+                icon.className = 'fas fa-clock';
+                break;
+            default:
+                icon.className = 'fas fa-circle';
+        }
+    }
+    
+    async testApiKeys() {
+        const openaiKey = this.openaiApiKeyInput.value.trim();
+        const anthropicKey = this.anthropicApiKeyInput.value.trim();
+        
+        if (!openaiKey && !anthropicKey) {
+            alert('Please enter at least one API key to test.');
+            return;
+        }
+        
+        // Disable button during testing
+        this.testApiKeysBtn.disabled = true;
+        this.testApiKeysBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+        
+        try {
+            // Test keys by calling the models endpoint with the keys
+            const response = await fetch('/api/models', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    openai_api_key: openaiKey || null,
+                    anthropic_api_key: anthropicKey || null,
+                    test_only: true
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                // Update provider status based on response
+                if (data.providers) {
+                    this.updateProviderStatusFromResponse(data.providers);
+                }
+                
+                // Show success message
+                this.showApiKeyTestResult(true, 'API keys tested successfully!');
+            } else {
+                throw new Error(data.detail || 'Failed to test API keys');
+            }
+        } catch (error) {
+            console.error('Error testing API keys:', error);
+            this.showApiKeyTestResult(false, error.message);
+        } finally {
+            // Re-enable button
+            this.testApiKeysBtn.disabled = false;
+            this.testApiKeysBtn.innerHTML = '<i class="fas fa-check-circle"></i> Test API Keys';
+        }
+    }
+    
+    updateProviderStatusFromResponse(providers) {
+        // Update Ollama status
+        if (providers.Ollama) {
+            const status = providers.Ollama.available ? 'available' : 'unavailable';
+            const modelCount = providers.Ollama.model_count || 0;
+            const message = providers.Ollama.available ? 
+                `Ollama: Available (${modelCount} models)` : 
+                'Ollama: Unavailable';
+            this.updateProviderStatus(this.ollamaProviderStatus, status, message);
+        }
+        
+        // Update OpenAI status
+        if (providers.OpenAI) {
+            const status = providers.OpenAI.available ? 'available' : 'unavailable';
+            const modelCount = providers.OpenAI.model_count || 0;
+            const message = providers.OpenAI.available ? 
+                `OpenAI: Available (${modelCount} models)` : 
+                'OpenAI: Unavailable';
+            this.updateProviderStatus(this.openaiProviderStatus, status, message);
+        }
+        
+        // Update Anthropic status
+        if (providers.Anthropic) {
+            const status = providers.Anthropic.available ? 'available' : 'unavailable';
+            const modelCount = providers.Anthropic.model_count || 0;
+            const message = providers.Anthropic.available ? 
+                `Anthropic: Available (${modelCount} models)` : 
+                'Anthropic: Unavailable';
+            this.updateProviderStatus(this.anthropicProviderStatus, status, message);
+        }
+    }
+    
+    showApiKeyTestResult(success, message) {
+        // Create a temporary notification
+        const notification = document.createElement('div');
+        notification.className = `api-test-notification ${success ? 'success' : 'error'}`;
+        notification.innerHTML = `
+            <i class="fas fa-${success ? 'check-circle' : 'exclamation-circle'}"></i>
+            <span>${message}</span>
+        `;
+        
+        // Add to page
+        document.body.appendChild(notification);
+        
+        // Animate in
+        setTimeout(() => notification.classList.add('show'), 100);
+        
+        // Remove after delay
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => document.body.removeChild(notification), 300);
+        }, 3000);
+    }
+    
+    async refreshModels() {
+        // Disable button during refresh
+        this.refreshModelsBtn.disabled = true;
+        this.refreshModelsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+        
+        try {
+            // Get API keys
+            const openaiKey = this.openaiApiKeyInput.value.trim();
+            const anthropicKey = this.anthropicApiKeyInput.value.trim();
+            
+            // Load models with API keys
+            await this.loadModelsWithApiKeys(openaiKey, anthropicKey);
+            
+            // Show success message
+            this.showApiKeyTestResult(true, 'Models refreshed successfully!');
+        } catch (error) {
+            console.error('Error refreshing models:', error);
+            this.showApiKeyTestResult(false, 'Failed to refresh models: ' + error.message);
+        } finally {
+            // Re-enable button
+            this.refreshModelsBtn.disabled = false;
+            this.refreshModelsBtn.innerHTML = '<i class="fas fa-sync"></i> Refresh Models';
+        }
+    }
+    
+    async loadModelsWithApiKeys(openaiKey, anthropicKey) {
+        try {
+            this.modelInfo.classList.add('loading');
+            this.modelInfoText.textContent = 'Loading available models...';
+            
+            const requestBody = {};
+            if (openaiKey) requestBody.openai_api_key = openaiKey;
+            if (anthropicKey) requestBody.anthropic_api_key = anthropicKey;
+            
+            const response = await fetch('/api/models', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.populateModelDropdown(data.models);
+                this.modelInfo.classList.remove('loading');
+                this.updateModelInfo();
+                
+                // Update provider status
+                if (data.providers) {
+                    this.updateProviderStatusFromResponse(data.providers);
+                }
+            } else {
+                throw new Error(data.detail || 'Failed to load models');
+            }
+        } catch (error) {
+            console.error('Error loading models with API keys:', error);
+            this.modelInfo.classList.remove('loading');
+            this.modelInfo.classList.add('error');
+            this.modelInfoText.textContent = 'Error loading models: ' + error.message;
+            
+            // Add default model as fallback
+            this.aiModelSelect.innerHTML = '<option value="llama3.1:8b">llama3.1:8b (Default)</option>';
+        }
+    }
 }
 
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new YouTubeSummarizer();
+    window.youtubeSummarizer = new YouTubeSummarizer();
 });
 
 // Handle page visibility changes
